@@ -1,26 +1,22 @@
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).end();
 
-const express = require('express');
-const app = express();
-const port = process.env.PORT || 3000;
+  const { message } = req.body;
+  const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
 
-app.use(express.static('frontend'));
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-3.5-turbo',
+      messages: [{ role: 'user', content: message }],
+    }),
+  });
 
-app.get('/ai/image-to-video', (req, res) => {
-    res.status(404).send('Image-to-Video coming soon.');
-});
-app.get('/ai/chatbot', (req, res) => {
-    res.status(404).send('Chatbot coming soon.');
-});
-app.get('/shop', (req, res) => {
-    res.status(404).send('Merch shop not ready.');
-});
-app.get('/promo', (req, res) => {
-    res.status(404).send('Promo crew not available.');
-});
-app.get('/identity', (req, res) => {
-    res.status(404).send('Brand identity coming.');
-});
+  const data = await response.json();
 
-app.listen(port, () => {
-    console.log(`SafeWørd AI server running on port ${port}`);
-});
+  res.status(200).json({ reply: data.choices?.[0]?.message?.content || 'No reply' });
+}
