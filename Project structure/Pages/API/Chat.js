@@ -1,29 +1,72 @@
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-const REQUEST_TIMEOUT_MS = 30000;
+const MAX_MESSAGE_LENGTH = 2000
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX_REQUESTS = 10
+const UPSTREAM_TIMEOUT_MS = 30_000
+
+const requestLog = new Map()
+
+function clientKey(req) {
+  const forwarded = req.headers['x-forwarded-for']
+  const ip = Array.isArray(forwarded)
+    ? forwarded[0]
+    : (forwarded || '').split(',')[0].trim()
+  return ip || req.socket?.remoteAddress || 'unknown'
+}
+
+function isRateLimited(key) {
+  const now = Date.now()
+  const hits = (requestLog.get(key) || []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
+  hits.push(now)
+  requestLog.set(key, hits)
+
+  for (const [k, timestamps] of requestLog) {
+    if (timestamps.every((t) => now - t >= RATE_LIMIT_WINDOW_MS)) requestLog.delete(k)
+  }
+
+  return hits.length > RATE_LIMIT_MAX_REQUESTS
+}
+
+export const config = {
+  api: {
+    bodyParser: { sizeLimit: '8kb' },
+  },
+}
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store')
+
   if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.setHeader('Allow', 'POST')
+    return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const message = req.body?.message;
-  if (typeof message !== 'string' || message.trim() === '') {
-    return res.status(400).json({ error: 'A non-empty "message" string is required' });
-  }
-
-  const apiKey = process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
-    console.error('chat: OPENAI_API_KEY is not configured');
-    return res.status(500).json({ error: 'Chat is not configured' });
+    console.error('OPENAI_API_KEY is not configured')
+    return res.status(503).json({ error: 'Chat is unavailable' })
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  if (isRateLimited(clientKey(req))) {
+    return res.status(429).json({ error: 'Too many requests' })
+  }
 
-  let response;
+  const message = req.body?.message
+  if (typeof message !== 'string') {
+    return res.status(400).json({ error: 'Field "message" must be a string' })
+  }
+
+  const trimmed = message.trim()
+  if (!trimmed) {
+    return res.status(400).json({ error: 'Field "message" must not be empty' })
+  }
+  if (trimmed.length > MAX_MESSAGE_LENGTH) {
+    return res.status(400).json({
+      error: `Field "message" must be at most ${MAX_MESSAGE_LENGTH} characters`,
+    })
+  }
+
   try {
-    response = await fetch(OPENAI_URL, {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -31,45 +74,29 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'gpt-3.5-turbo',
-        messages: [{ role: 'user', content: message }],
+        messages: [{ role: 'user', content: trimmed }],
       }),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      console.error('chat: upstream request timed out after %dms', REQUEST_TIMEOUT_MS);
-      return res.status(504).json({ error: 'Chat provider timed out' });
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    })
+
+    if (!response.ok) {
+      console.error('OpenAI request failed with status %d', response.status)
+      return res.status(502).json({ error: 'Upstream request failed' })
     }
-    console.error('chat: upstream request failed', error);
-    return res.status(502).json({ error: 'Chat provider is unreachable' });
-  } finally {
-    clearTimeout(timeout);
-  }
 
-  const rawBody = await response.text().catch((error) => {
-    console.error('chat: failed to read upstream response body', error);
-    return '';
-  });
+    const data = await response.json()
+    const reply = data.choices?.[0]?.message?.content
+    if (typeof reply !== 'string') {
+      return res.status(502).json({ error: 'Upstream request failed' })
+    }
 
-  if (!response.ok) {
-    console.error('chat: upstream returned %d: %s', response.status, rawBody);
-    const status = response.status === 429 || response.status >= 500 ? 502 : 500;
-    return res.status(status).json({ error: 'Chat provider returned an error' });
-  }
-
-  let data;
-  try {
-    data = JSON.parse(rawBody);
+    return res.status(200).json({ reply })
   } catch (error) {
-    console.error('chat: upstream returned invalid JSON', error);
-    return res.status(502).json({ error: 'Chat provider returned an invalid response' });
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      console.error('Chat request timed out after %dms', UPSTREAM_TIMEOUT_MS)
+      return res.status(504).json({ error: 'Upstream request timed out' })
+    }
+    console.error('Chat request errored:', error)
+    return res.status(502).json({ error: 'Upstream request failed' })
   }
-
-  const reply = data.choices?.[0]?.message?.content;
-  if (typeof reply !== 'string' || reply === '') {
-    console.error('chat: upstream response contained no reply: %s', rawBody);
-    return res.status(502).json({ error: 'Chat provider returned no reply' });
-  }
-
-  return res.status(200).json({ reply });
 }
