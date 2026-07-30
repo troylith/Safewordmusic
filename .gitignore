@@ -1,5 +1,11 @@
-node_modules
-.next
+# dependencies
+/node_modules/
+
+# next.js build output
+/.next/
+/out/
+
+# test coverage
 coverage
 
 # local env files
@@ -7,3 +13,16 @@ coverage
 .env.*
 !.env.example
 !.env.local.example
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# editor directories
+.vscode/
+.idea/
