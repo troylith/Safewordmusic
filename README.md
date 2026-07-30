@@ -23,9 +23,10 @@ The site runs at http://localhost:3000.
 
 ## Environment variables
 
-| Variable         | Description                                                |
-| ---------------- | ---------------------------------------------------------- |
-| `OPENAI_API_KEY` | Server-side key used by `/api/chat`. Never commit its value. |
+| Variable              | Description                                                 |
+| --------------------- | ----------------------------------------------------------- |
+| `OPENAI_API_KEY`      | Server-side key used by `/api/chat`. Never commit its value. |
+| `REPLICATE_API_TOKEN` | Server-side token for Replicate-backed features.            |
 
 Do not prefix secrets with `NEXT_PUBLIC_`: that inlines them into the browser bundle.
 
@@ -35,6 +36,8 @@ Do not prefix secrets with `NEXT_PUBLIC_`: that inlines them into the browser bu
 pages/           routes (index.js) and API routes (api/chat.js)
 styles/          global styles and CSS modules
 public/images/   static assets
+__tests__/       Jest unit tests
+gumroad-page/    standalone static store page
 ```
 
 ## Scripts
@@ -42,3 +45,4 @@ public/images/   static assets
 - `npm run dev` — start the dev server
 - `npm run build` — production build
 - `npm start` — serve the production build
+- `npm test` / `npm run test:coverage` — Jest unit tests
