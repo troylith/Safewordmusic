@@ -261,9 +261,10 @@
   .socials svg { width: 18px; height: 18px; }
   .copy { color: var(--ink-faint); font-size: 0.85rem; }
 
-  /* ---------- Reveal on scroll ---------- */
-  .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.7s var(--ease), transform 0.7s var(--ease); }
-  .reveal.in { opacity: 1; transform: none; }
+  /* ---------- Reveal on scroll (only hidden when JS is active) ---------- */
+  .reveal { transition: opacity 0.7s var(--ease), transform 0.7s var(--ease); }
+  .js .reveal { opacity: 0; transform: translateY(22px); }
+  .js .reveal.in { opacity: 1; transform: none; }
 
   /* ---------- Responsive ---------- */
   @media (max-width: 860px) {
@@ -417,6 +418,10 @@
 
     document.getElementById("year").textContent = new Date().getFullYear();
 
+    // Mark JS as active so the reveal animation's hidden state only applies
+    // when scripts run; without JS the content stays visible.
+    document.documentElement.classList.add("js");
+
     // ---- Reveal on scroll ----
     (function () {
       var els = document.querySelectorAll(".reveal");
@@ -427,15 +432,19 @@
       els.forEach(function (el) { io.observe(el); });
     })();
 
-    // ---- Graceful preview fallback for the follow form ----
-    // Gumroad wires [data-gumroad-follow] automatically when published.
-    // This local handler only shows the confirmation message during preview.
+    // ---- Local-preview fallback for the follow form ----
+    // When published, Gumroad wires [data-gumroad-follow] to the email audience
+    // automatically, so we must NOT intercept the submit there. This fallback
+    // (which only fakes the confirmation) runs solely for local preview
+    // (file:// or ?preview=1) to avoid showing a false "subscribed" message.
     (function () {
+      var isPreview = location.protocol === "file:" ||
+        new URLSearchParams(location.search).has("preview");
+      if (!isPreview) return;
       var form = document.querySelector("form[data-gumroad-follow]");
       var msg = document.querySelector("[data-gumroad-follow-message]");
       if (!form || !msg) return;
       form.addEventListener("submit", function (ev) {
-        if (form.dataset.gumroadReady === "true") return; // let Gumroad handle it live
         ev.preventDefault();
         if (form.checkValidity && !form.checkValidity()) { form.reportValidity(); return; }
         msg.classList.add("is-visible");
