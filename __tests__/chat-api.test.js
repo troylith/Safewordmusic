@@ -1,7 +1,7 @@
 /**
  * @jest-environment node
  */
-import handler from '../Project structure/Pages/API/Chat'
+import handler from '../pages/api/chat'
 
 function createRes() {
   const res = {
