@@ -11,6 +11,20 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<script>
+  // Resolve theme and mark JS-available before first paint to avoid a
+  // colour flash and to keep .reveal content hidden only when JS runs.
+  (function () {
+    var root = document.documentElement;
+    root.className = root.className ? root.className + " js" : "js";
+    var saved = null;
+    try { saved = localStorage.getItem("sw-theme"); } catch (e) {}
+    if (!saved) {
+      saved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+    }
+    root.setAttribute("data-theme", saved);
+  })();
+</script>
 <style>
   :root {
     --ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -262,8 +276,10 @@
   .copy { color: var(--ink-faint); font-size: 0.85rem; }
 
   /* ---------- Reveal on scroll ---------- */
-  .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.7s var(--ease), transform 0.7s var(--ease); }
-  .reveal.in { opacity: 1; transform: none; }
+  /* Only hide reveal elements when JS is available to un-hide them, so the
+     page stays fully visible if scripts are blocked or fail. */
+  .js .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.7s var(--ease), transform 0.7s var(--ease); }
+  .js .reveal.in { opacity: 1; transform: none; }
 
   /* ---------- Responsive ---------- */
   @media (max-width: 860px) {
@@ -274,7 +290,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     * { animation: none !important; transition: none !important; scroll-behavior: auto; }
-    .reveal { opacity: 1; transform: none; }
+    .js .reveal { opacity: 1; transform: none; }
   }
 </style>
 </head>
@@ -393,16 +409,9 @@
   </footer>
 
   <script>
-    // ---- Theme: respect saved choice, then system preference ----
+    // ---- Theme toggle wiring (theme already resolved in <head>) ----
     (function () {
       var root = document.documentElement;
-      var saved = null;
-      try { saved = localStorage.getItem("sw-theme"); } catch (e) {}
-      if (!saved) {
-        saved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
-      }
-      root.setAttribute("data-theme", saved);
-
       var btn = document.getElementById("themeToggle");
       var label = document.getElementById("themeLabel");
       function sync() { label.textContent = root.getAttribute("data-theme") === "dark" ? "Light" : "Dark"; }
@@ -434,8 +443,14 @@
       var form = document.querySelector("form[data-gumroad-follow]");
       var msg = document.querySelector("[data-gumroad-follow-message]");
       if (!form || !msg) return;
+      var isLocalPreview =
+        location.protocol === "file:" ||
+        /[?&]preview=1(&|$)/.test(location.search);
       form.addEventListener("submit", function (ev) {
-        if (form.dataset.gumroadReady === "true") return; // let Gumroad handle it live
+        // Only fake a confirmation during genuine local preview. On the
+        // published page, let Gumroad handle the submission — never cancel a
+        // real submit and claim success when no email was recorded.
+        if (!isLocalPreview) return;
         ev.preventDefault();
         if (form.checkValidity && !form.checkValidity()) { form.reportValidity(); return; }
         msg.classList.add("is-visible");
