@@ -11,7 +11,7 @@ export default function Home() {
       <main className={styles.main}>
         <h1 className={styles.title}>Welcome to Safewørd</h1>
         <p className={styles.description}>Dark. Clean. Real.</p>
-        <a href="https://instagram.com" target="_blank" className={styles.button}>Follow on Instagram</a>
+        <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className={styles.button}>Follow on Instagram</a>
       </main>
     </div>
   )

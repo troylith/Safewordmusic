@@ -1,4 +1,9 @@
 node_modules
 .next
-.env.local
 coverage
+
+# local env files
+.env
+.env.*
+!.env.example
+!.env.local.example
