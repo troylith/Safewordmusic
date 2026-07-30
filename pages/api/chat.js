@@ -92,6 +92,10 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ reply })
   } catch (error) {
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+      console.error('Chat request timed out after %dms', UPSTREAM_TIMEOUT_MS)
+      return res.status(504).json({ error: 'Upstream request timed out' })
+    }
     console.error('Chat request errored:', error)
     return res.status(502).json({ error: 'Upstream request failed' })
   }

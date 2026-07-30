@@ -180,6 +180,18 @@ describe('Chat API handler', () => {
     expect(res.body).toEqual({ error: 'Upstream request failed' })
   })
 
+  it('converts an upstream timeout into a 504', async () => {
+    const timeout = new Error('The operation was aborted due to timeout')
+    timeout.name = 'TimeoutError'
+    global.fetch = jest.fn().mockRejectedValue(timeout)
+    const res = createRes()
+
+    await handler(createReq({ body: { message: 'hello' } }), res)
+
+    expect(res.status).toHaveBeenCalledWith(504)
+    expect(res.body).toEqual({ error: 'Upstream request timed out' })
+  })
+
   it('converts a non-ok upstream status into a 502', async () => {
     mockFetchResponse({}, { ok: false, status: 500 })
     const res = createRes()
