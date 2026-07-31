@@ -23,6 +23,6 @@ module.exports = {
     '\\.(css|sass|scss)$': '<rootDir>/__mocks__/styleMock.js',
     '\\.(jpg|jpeg|png|gif|svg|webp|avif)$': '<rootDir>/__mocks__/fileMock.js',
   },
-  collectCoverageFrom: ['pages/**/*.{js,jsx}', '!**/node_modules/**'],
+  collectCoverageFrom: ['pages/**/*.{js,jsx}', 'next.config.js', '!**/node_modules/**'],
   coverageReporters: ['text', 'lcov'],
 }

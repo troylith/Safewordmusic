@@ -170,6 +170,60 @@ describe('Chat API handler', () => {
     expect(global.fetch).toHaveBeenCalledTimes(10)
   })
 
+  it('rate limits per client, using the first x-forwarded-for entry', async () => {
+    mockFetchResponse({ choices: [{ message: { content: 'ok' } }] })
+    const headers = { 'x-forwarded-for': '198.51.100.1, 10.1.1.1' }
+
+    for (let i = 0; i < 10; i += 1) {
+      await handler(createReq({ headers, body: { message: 'hello' } }), createRes())
+    }
+
+    const limited = createRes()
+    await handler(createReq({ headers, body: { message: 'hello' } }), limited)
+    expect(limited.status).toHaveBeenCalledWith(429)
+
+    const other = createRes()
+    await handler(
+      createReq({
+        headers: { 'x-forwarded-for': ['198.51.100.2', '10.1.1.1'] },
+        body: { message: 'hello' },
+      }),
+      other,
+    )
+    expect(other.status).toHaveBeenCalledWith(200)
+  })
+
+  it('falls back to the socket address when no forwarding header is present', async () => {
+    mockFetchResponse({ choices: [{ message: { content: 'ok' } }] })
+    const socket = { remoteAddress: '192.0.2.55' }
+
+    for (let i = 0; i < 10; i += 1) {
+      await handler(createReq({ headers: {}, socket, body: { message: 'hello' } }), createRes())
+    }
+
+    const limited = createRes()
+    await handler(createReq({ headers: {}, socket, body: { message: 'hello' } }), limited)
+
+    expect(limited.status).toHaveBeenCalledWith(429)
+  })
+
+  it('lets a client through again once its window has elapsed', async () => {
+    mockFetchResponse({ choices: [{ message: { content: 'ok' } }] })
+    const headers = { 'x-forwarded-for': '198.51.100.9' }
+    const start = Date.now()
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start)
+
+    for (let i = 0; i < 11; i += 1) {
+      await handler(createReq({ headers, body: { message: 'hello' } }), createRes())
+    }
+
+    now.mockReturnValue(start + 60_001)
+    const res = createRes()
+    await handler(createReq({ headers, body: { message: 'hello' } }), res)
+
+    expect(res.status).toHaveBeenCalledWith(200)
+  })
+
   it('converts upstream errors into a 502 without leaking details', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('network down'))
     const res = createRes()
